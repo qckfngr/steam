@@ -1,0 +1,93 @@
+// If the macro is hit too fast, then stop till it's ready to hit again.
+if @timerexists 'poisoning' and @timer 'poisoning' < 1000
+  headmsg 'Patience...' 568
+  stop
+endif
+// Make sure we have a kryss to poison and keep an
+// alias to it if we find it.
+if counttype 0x1401 'any' 'backpack' == 0
+  headmsg 'I need a kryss to poison...' 568
+  stop
+elseif not findalias 'poison kryss'
+  @findtype 0x1401 'any' 'backpack'
+  @setalias 'poison kryss' 'found'
+endif
+// Clear the poison bottle alias if already there
+@unsetalias 'poison bottle'
+// Make sure we have a bottle to hold the poison.
+if counttype 0xf0e 0 'backpack' == 0
+  // Well, we have no empty bottle. Maybe we already
+  // have a poison bottle?
+  if @findtype 0xf0a 0
+    @setalias 'poison bottle' 'found'
+  else
+    headmsg 'I need a bottle to hold the poison...' 568
+    stop
+  endif
+endif
+// We're going to use the journal here.
+// Clear previous entries from being looked at.
+@clearjournal
+// Let's fill up our bottle if it's not full already.
+if not findalias 'poison bottle'
+  // Find a keg to draw poison from.
+  if not findalias 'poison keg'
+    headmsg 'Now where was that keg...' 568
+    sysmsg 'Please choose a poison keg' 568
+    promptalias 'poison keg'
+  endif
+  useobject 'poison keg'
+  pause 600
+  // No more poison, we're all done.
+  if @injournal 'The keg is empty.' 'system'
+    headmsg 'All out of poison...' 568
+    stop
+  endif
+  @findtype 0xf0a 0
+  @setalias 'poison bottle' 'found'
+endif
+// We're going to make sure that we don't allow poisoning
+// too fast. Since the macro pulls poison out of the keg
+// spamming it is bad.
+if not @timerexists 'poisoning'
+  createtimer 'poisoning'
+endif
+settimer 'poisoning' 0
+// Let's get to the actual poisoning!
+useskill 'Poisoning'
+waitfortarget 15000
+target! 'poison bottle' // From bottle
+waitfortarget 15000
+target! 'poison kryss' // To kryss
+// We want to wait 5 seconds before we're done, because that's the
+// poisoning cooldown. But we want to respond earlier if we accidentally
+// poison ourselves. So we wait for the "Oops" message for 5 seconds.
+waitforjournal 'You make a grave mistake while applying the poison.' 5000 'system'
+// If we're poisoned, move into that logic first.
+if poisoned 'self'
+  while poisoned 'self'
+    if @findtype 0xf07 0 'backpack' // Cure potion
+      useobject 'found'
+      pause 1000
+    elseif skill 'magery' > 20 and counter 'garlic' > 0 and counter 'ginseng' > 0
+      cast 'Cure'
+      waitfortarget 15000
+      target! 'self'
+      pause 500
+    else
+      headmsg 'I need to cure this!!!' 568
+      stop
+    endif
+  endwhile
+  // We may not be past the poisoning timer though.
+  while timer 'poisoning' < 5000
+    pause 250
+  endwhile
+  headmsg 'Bah...' 568
+  // Otherwise just figure out what to say.
+elseif @injournal 'You apply the poison.' 'system'
+  headmsg 'Done...' 568
+elseif @injournal 'You fail to apply a sufficient dose of poison' 'system'
+  headmsg 'Damn...' 568
+endif
+// Done!
